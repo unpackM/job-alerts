@@ -1,0 +1,14 @@
+{
+  "name": "sonny-job-alerts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "node src/job-alerts.js",
+    "test:telegram": "node src/job-alerts.js --telegram-test",
+    "dry-run": "node src/job-alerts.js --dry-run"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

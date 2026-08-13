@@ -1,0 +1,164 @@
+[
+  {
+    "company": "SK Careers",
+    "tier": 1,
+    "url": "https://www.skcareers.com/Recruit",
+    "tags": ["\ub300\uae30\uc5c5", "\ud1b5\uc2e0", "\ud50c\ub7ab\ud3fc"]
+  },
+  {
+    "company": "SK Telecom",
+    "tier": 1,
+    "url": "https://careers.sktelecom.com/",
+    "tags": ["\ub300\uae30\uc5c5", "\ud1b5\uc2e0", "\uad6c\ub3c5"]
+  },
+  {
+    "company": "LG Careers",
+    "tier": 1,
+    "url": "https://careers.lg.com/",
+    "tags": ["\ub300\uae30\uc5c5", "\ud1b5\uc2e0", "\ud50c\ub7ab\ud3fc"]
+  },
+  {
+    "company": "LG Uplus",
+    "tier": 1,
+    "url": "https://careers.lg.com/channel/detail/lgu/job_openings",
+    "tags": ["\ub300\uae30\uc5c5", "\ud1b5\uc2e0", "\uad6c\ub3c5"]
+  },
+  {
+    "company": "NAVER",
+    "tier": 1,
+    "url": "https://recruit.navercorp.com/",
+    "tags": ["\ub300\uae30\uc5c5", "\ud50c\ub7ab\ud3fc", "\uba64\ubc84\uc2ed"]
+  },
+  {
+    "company": "NAVER Cloud",
+    "tier": 2,
+    "url": "https://recruit.navercloudcorp.com/rcrt/list.do",
+    "tags": ["\ub300\uae30\uc5c5", "\ud50c\ub7ab\ud3fc", "B2B"]
+  },
+  {
+    "company": "NAVER Financial",
+    "tier": 2,
+    "url": "https://recruit.naverfincorp.com/",
+    "tags": ["\ub300\uae30\uc5c5", "\ud540\ud14c\ud06c", "\ud50c\ub7ab\ud3fc"]
+  },
+  {
+    "company": "NAVER Webtoon",
+    "tier": 2,
+    "url": "https://recruit.webtoonscorp.com/rcrt/list.do",
+    "tags": ["\ub300\uae30\uc5c5", "\ucf58\ud150\uce20", "\ud50c\ub7ab\ud3fc"]
+  },
+  {
+    "company": "Kakao",
+    "tier": 1,
+    "url": "https://careers.kakao.com/jobs",
+    "tags": ["\ub300\uae30\uc5c5", "\ud50c\ub7ab\ud3fc", "\ucf58\ud150\uce20"]
+  },
+  {
+    "company": "Coupang",
+    "tier": 1,
+    "url": "https://www.coupang.jobs/kr/jobs/",
+    "tags": ["\ub300\uae30\uc5c5", "\ucee4\uba38\uc2a4", "\ud50c\ub7ab\ud3fc"]
+  },
+  {
+    "company": "Toss",
+    "tier": 1,
+    "url": "https://toss.im/career/jobs",
+    "tags": ["\ub300\uae30\uc5c5", "\ud540\ud14c\ud06c", "\ud50c\ub7ab\ud3fc"]
+  },
+  {
+    "company": "Hyundai Card",
+    "tier": 2,
+    "url": "https://career.hyundaicard.com/",
+    "tags": ["\ub300\uae30\uc5c5", "\ud540\ud14c\ud06c", "\uba64\ubc84\uc2ed"]
+  },
+  {
+    "company": "CJ Group",
+    "tier": 2,
+    "url": "https://recruit.cj.net/",
+    "tags": ["\ub300\uae30\uc5c5", "\ucf58\ud150\uce20", "\ucee4\uba38\uc2a4"]
+  },
+  {
+    "company": "Samsung Careers",
+    "tier": 1,
+    "url": "https://www.samsungcareers.com/",
+    "tags": ["\ub300\uae30\uc5c5", "\ud50c\ub7ab\ud3fc"]
+  },
+  {
+    "company": "Hyundai Motor Group",
+    "tier": 1,
+    "url": "https://talent.hyundai.com/",
+    "tags": ["\ub300\uae30\uc5c5", "\ud50c\ub7ab\ud3fc", "\uba64\ubc84\uc2ed"]
+  },
+  {
+    "company": "Catch - Business Planning",
+    "tier": 3,
+    "url": "https://www.catch.co.kr/Search/SearchDetail?Menu=6&Keyword=%EC%82%AC%EC%97%85%EA%B8%B0%ED%9A%8D%20%EA%B2%BD%EB%A0%A5",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uc911\uacac\uae30\uc5c5", "\uc0ac\uc5c5\uae30\ud68d"]
+  },
+  {
+    "company": "Catch - Partnership",
+    "tier": 3,
+    "url": "https://www.catch.co.kr/Search/SearchDetail?Menu=6&Keyword=%EC%A0%9C%ED%9C%B4%20%EA%B2%BD%EB%A0%A5",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uc911\uacac\uae30\uc5c5", "\uc81c\ud734"]
+  },
+  {
+    "company": "Catch - Product Planning",
+    "tier": 3,
+    "url": "https://www.catch.co.kr/Search/SearchDetail?Menu=6&Keyword=%EC%83%81%ED%92%88%EA%B8%B0%ED%9A%8D%20%EA%B2%BD%EB%A0%A5",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uc911\uacac\uae30\uc5c5", "\uc0c1\ud488\uae30\ud68d"]
+  },
+  {
+    "company": "Saramin - Business Planning",
+    "tier": 3,
+    "url": "https://www.saramin.co.kr/zf_user/search?searchword=%EC%82%AC%EC%97%85%EA%B8%B0%ED%9A%8D%20%EA%B2%BD%EB%A0%A5",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uc911\uacac\uae30\uc5c5", "\uc0ac\uc5c5\uae30\ud68d"]
+  },
+  {
+    "company": "Saramin - Partnership",
+    "tier": 3,
+    "url": "https://www.saramin.co.kr/zf_user/search?searchword=%EC%A0%9C%ED%9C%B4%20%EA%B2%BD%EB%A0%A5",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uc911\uacac\uae30\uc5c5", "\uc81c\ud734"]
+  },
+  {
+    "company": "Saramin - Product Planning",
+    "tier": 3,
+    "url": "https://www.saramin.co.kr/zf_user/search?searchword=%EC%83%81%ED%92%88%EA%B8%B0%ED%9A%8D%20%EA%B2%BD%EB%A0%A5",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uc911\uacac\uae30\uc5c5", "\uc0c1\ud488\uae30\ud68d"]
+  },
+  {
+    "company": "Wanted - Business Planning",
+    "tier": 3,
+    "url": "https://www.wanted.co.kr/search?query=%EC%82%AC%EC%97%85%EA%B8%B0%ED%9A%8D",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uc911\uacac\uae30\uc5c5", "\uc0ac\uc5c5\uae30\ud68d"]
+  },
+  {
+    "company": "Wanted - Partnership",
+    "tier": 3,
+    "url": "https://www.wanted.co.kr/search?query=%EC%A0%9C%ED%9C%B4",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uc911\uacac\uae30\uc5c5", "\uc81c\ud734"]
+  },
+  {
+    "company": "Wanted - Growth",
+    "tier": 3,
+    "url": "https://www.wanted.co.kr/search?query=Growth%20PM",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ud50c\ub7ab\ud3fc", "Growth"]
+  },
+  {
+    "company": "Remember - Large Business Strategy",
+    "tier": 3,
+    "url": "https://career.rememberapp.co.kr/job/postings?search=%7B%22companySizes%22%3A%5B%22large%22%5D%2C%22jobCategoryNames%22%3A%5B%7B%22level1%22%3A%22%EA%B2%BD%EC%98%81%C2%B7%EC%A0%84%EB%9E%B5%C2%B7%EA%B8%B0%ED%9A%8D%22%2C%22level2%22%3A%22%EC%82%AC%EC%97%85%EC%A0%84%EB%9E%B5%C2%B7%EA%B8%B0%ED%9A%8D%22%7D%5D%7D",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uc0ac\uc5c5\uc804\ub7b5", "\uc0ac\uc5c5\uae30\ud68d"]
+  },
+  {
+    "company": "Remember - Business Planning",
+    "tier": 3,
+    "url": "https://career.rememberapp.co.kr/job/postings?keyword=%EC%82%AC%EC%97%85%EA%B8%B0%ED%9A%8D",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\uc0ac\uc5c5\uae30\ud68d"]
+  },
+  {
+    "company": "Remember - Partnership",
+    "tier": 3,
+    "url": "https://career.rememberapp.co.kr/job/postings?keyword=%EC%A0%9C%ED%9C%B4",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\uc81c\ud734"]
+  }
+]

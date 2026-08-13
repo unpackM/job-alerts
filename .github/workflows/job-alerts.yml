@@ -1,0 +1,48 @@
+name: Job Alerts
+
+on:
+  workflow_dispatch:
+  schedule:
+    # KST 09:00, 13:00, 18:30
+    - cron: "0 0 * * *"
+    - cron: "0 4 * * *"
+    - cron: "30 9 * * *"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Restore DB
+        uses: actions/cache/restore@v4
+        with:
+          path: data/jobs-db.json
+          key: job-alerts-db-${{ github.run_id }}
+          restore-keys: |
+            job-alerts-db-
+
+      - name: Run job alerts
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          JOB_ALERTS_MIN_SCORE: "70"
+          JOB_ALERTS_DAILY_SUMMARY_SCORE: "50"
+        run: node src/job-alerts.js
+
+      - name: Save DB
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data/jobs-db.json
+          key: job-alerts-db-${{ github.run_id }}
