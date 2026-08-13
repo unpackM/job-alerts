@@ -16,6 +16,10 @@ const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const telegramTest = args.has("--telegram-test");
 const loop = args.has("--loop");
+const collectOnly = args.has("--collect-only");
+const summaryYesterday = args.has("--summary-yesterday");
+const summaryToday = args.has("--summary-today");
+const summaryMode = summaryYesterday || summaryToday;
 
 await loadEnv();
 
@@ -30,7 +34,7 @@ if (telegramTest) {
 
 if (!telegramTest) {
 do {
-  await runOnce();
+  await runOnce({ collectOnly, summaryYesterday, summaryToday, summaryMode });
   if (!loop) break;
   const base = Number(process.env.JOB_ALERTS_INTERVAL_SECONDS || 10800);
   const jitter = Math.floor(Math.random() * Number(process.env.JOB_ALERTS_JITTER_SECONDS || 600));
@@ -38,7 +42,7 @@ do {
 } while (true);
 }
 
-async function runOnce() {
+async function runOnce(options = {}) {
   const targets = await readJson(path.join(rootDir, "config", "targets.json"));
   const keywords = await readJson(path.join(rootDir, "config", "keywords.json"));
   const db = await readDb();
@@ -89,7 +93,7 @@ async function runOnce() {
     }
   }
 
-  const alertJobs = Object.values(db.jobs)
+  const alertJobs = options.collectOnly || options.summaryMode ? [] : Object.values(db.jobs)
     .filter((job) => job.lastSeenAt === runStartedAt && !job.notifiedAt)
     .filter((job) => job.score >= minScore)
     .sort((a, b) => b.score - a.score)
@@ -111,12 +115,62 @@ async function runOnce() {
     }
   }
 
+  let summarySent = false;
+  let summaryJobs = [];
+  if (options.summaryMode) {
+    const period = getKstPeriod(options.summaryYesterday ? -1 : 0);
+    const summaryKey = `${options.summaryYesterday ? "yesterday" : "today"}:${period.label}`;
+    db.summaryNotifications ||= {};
+    summaryJobs = Object.values(db.jobs)
+      .filter((job) => job.firstDetectedAt)
+      .filter((job) => new Date(job.firstDetectedAt) >= period.startUtc && new Date(job.firstDetectedAt) < period.endUtc)
+      .filter((job) => job.score >= dailySummaryScore)
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return String(a.firstDetectedAt).localeCompare(String(b.firstDetectedAt));
+      });
+
+    if (db.summaryNotifications[summaryKey] && !dryRun) {
+      console.log(`Summary already sent for ${summaryKey}.`);
+    } else {
+      const messages = formatSummaryMessages({
+        jobs: summaryJobs,
+        errors,
+        period,
+        kind: options.summaryYesterday ? "yesterday" : "today",
+        detected: detectedJobs.length,
+        newJobs: newJobs.length
+      });
+      if (dryRun) {
+        console.log(messages.join("\n\n---\n\n"));
+      } else if (!hasTelegramConfig()) {
+        console.log(messages.join("\n\n---\n\n"));
+        console.log("Telegram/GitHub relay config is missing. Set TELEGRAM_* or TELEGRAM_VIA_GITHUB=1 with GH_TOKEN.");
+      } else {
+        for (const message of messages) {
+          await sendTelegram(message);
+          await sleep(1000);
+        }
+        db.summaryNotifications[summaryKey] = {
+          sentAt: new Date().toISOString(),
+          jobs: summaryJobs.length,
+          detected: detectedJobs.length,
+          newJobs: newJobs.length
+        };
+        summarySent = true;
+      }
+    }
+  }
+
   db.runs.unshift({
     startedAt: runStartedAt,
     targets: targets.length,
     detected: detectedJobs.length,
     newJobs: newJobs.length,
     alerted: alertJobs.length,
+    mode: options.summaryYesterday ? "summary-yesterday" : options.summaryToday ? "summary-today" : options.collectOnly ? "collect-only" : "immediate-alert",
+    summaryJobs: summaryJobs.length,
+    summarySent,
     errors
   });
   db.runs = db.runs.slice(0, 100);
@@ -130,6 +184,9 @@ async function runOnce() {
     detected: detectedJobs.length,
     newJobs: newJobs.length,
     alerted: alertJobs.length,
+    mode: options.summaryYesterday ? "summary-yesterday" : options.summaryToday ? "summary-today" : options.collectOnly ? "collect-only" : "immediate-alert",
+    summaryJobs: summaryJobs.length,
+    summarySent,
     errors: errors.length,
     dbPath
   }, null, 2));
@@ -456,6 +513,85 @@ function formatTelegramMessage(jobs, errors) {
   }
 
   return lines.join("\n").slice(0, 3900);
+}
+
+function formatSummaryMessages({ jobs, errors, period, kind, detected, newJobs }) {
+  const label = kind === "yesterday" ? "Previous day" : "Today";
+  const header = [
+    `[Job Alerts] ${label} batch (${period.label} KST)`,
+    `New matched jobs: ${jobs.length} (score >= ${dailySummaryScore})`,
+    `Current crawl: detected ${detected}, newly stored ${newJobs}`
+  ];
+
+  const visibleJobs = jobs.slice(0, 60);
+  const chunks = [];
+  let current = [];
+
+  for (const [index, job] of visibleJobs.entries()) {
+    const block = [
+      `${index + 1}. ${job.company} | ${job.title}`,
+      job.source && job.source !== job.company ? `Source: ${job.source}` : "",
+      `Score: ${job.score} / First seen: ${formatKstDateTime(job.firstDetectedAt)}`,
+      `Keywords: ${job.matchedKeywords?.slice(0, 8).join(", ") || "-"}`,
+      job.url,
+      job.snippet && job.snippet !== job.title ? `Summary: ${job.snippet.slice(0, 140)}` : "",
+      ""
+    ].filter((line) => line !== "");
+
+    if ([...current, ...block].join("\n").length > 3200 && current.length > 0) {
+      chunks.push(current);
+      current = [];
+    }
+    current.push(...block);
+  }
+  if (current.length > 0) chunks.push(current);
+  if (chunks.length === 0) chunks.push([]);
+
+  const footer = [];
+  if (jobs.length > visibleJobs.length) {
+    footer.push(`More: ${jobs.length - visibleJobs.length} jobs omitted.`);
+  }
+  if (errors.length > 0) {
+    footer.push(`Crawl errors: ${errors.length} sites`);
+  }
+  if (footer.length > 0) {
+    const last = chunks[chunks.length - 1];
+    if ([...last, "", ...footer].join("\n").length > 3200) {
+      chunks.push(footer);
+    } else {
+      last.push("", ...footer);
+    }
+  }
+
+  return chunks.map((chunk, index) => [
+    `${header[0]} (${index + 1}/${chunks.length})`,
+    ...header.slice(1),
+    "",
+    ...chunk
+  ].join("\n").slice(0, 3900));
+}
+
+function getKstPeriod(dayOffset) {
+  const nowKst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  nowKst.setUTCDate(nowKst.getUTCDate() + dayOffset);
+  const year = nowKst.getUTCFullYear();
+  const month = nowKst.getUTCMonth();
+  const date = nowKst.getUTCDate();
+  const startUtc = new Date(Date.UTC(year, month, date) - 9 * 60 * 60 * 1000);
+  const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60 * 1000);
+  const label = `${year}-${String(month + 1).padStart(2, "0")}-${String(date).padStart(2, "0")}`;
+  return { label, startUtc, endUtc };
+}
+
+function formatKstDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(new Date(value).getTime() + 9 * 60 * 60 * 1000);
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  const h = String(date.getUTCHours()).padStart(2, "0");
+  const min = String(date.getUTCMinutes()).padStart(2, "0");
+  return `${y}-${m}-${d} ${h}:${min} KST`;
 }
 
 function u(hexCodes) {

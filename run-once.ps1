@@ -8,7 +8,7 @@ $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $logPath = Join-Path $logDir "run_$stamp.log"
 
 try {
-  node .\src\job-alerts.js *>&1 | Tee-Object -FilePath $logPath
+  node .\src\job-alerts.js --collect-only *>&1 | Tee-Object -FilePath $logPath
 } catch {
   $_ | Out-File -FilePath $logPath -Append
   throw

@@ -2,8 +2,18 @@ name: Job Alerts
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode"
+        required: false
+        default: "summary-today"
+        type: choice
+        options:
+          - collect-only
+          - summary-today
+          - summary-yesterday
   schedule:
-    # Every 3 hours. GitHub cron is UTC.
+    # Every 3 hours for silent collection. 00:00/09:00 UTC send 09:00/18:00 KST summaries.
     - cron: "0 */3 * * *"
 
 jobs:
@@ -30,13 +40,34 @@ jobs:
           restore-keys: |
             job-alerts-db-
 
+      - name: Choose run mode
+        id: mode
+        shell: bash
+        run: |
+          mode="--collect-only"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            case "${{ github.event.inputs.mode }}" in
+              summary-yesterday) mode="--summary-yesterday" ;;
+              summary-today) mode="--summary-today" ;;
+              *) mode="--collect-only" ;;
+            esac
+          else
+            hour="$(date -u +%H)"
+            if [ "$hour" = "00" ]; then
+              mode="--summary-yesterday"
+            elif [ "$hour" = "09" ]; then
+              mode="--summary-today"
+            fi
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
       - name: Run job alerts
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           JOB_ALERTS_MIN_SCORE: "60"
           JOB_ALERTS_DAILY_SUMMARY_SCORE: "50"
-        run: node src/job-alerts.js
+        run: node src/job-alerts.js ${{ steps.mode.outputs.mode }}
 
       - name: Save DB
         uses: actions/cache/save@v4
