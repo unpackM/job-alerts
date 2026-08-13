@@ -72,6 +72,22 @@
     "tags": ["\ub300\uae30\uc5c5", "\ud540\ud14c\ud06c", "\uba64\ubc84\uc2ed"]
   },
   {
+    "company": "Hyundai Card via Catch",
+    "fixedCompany": "\ud604\ub300\uce74\ub4dc",
+    "source": "Catch",
+    "tier": 2,
+    "url": "https://www.catch.co.kr/Search/SearchDetail?Menu=6&Keyword=%ED%98%84%EB%8C%80%EC%B9%B4%EB%93%9C",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\ud540\ud14c\ud06c", "\uba64\ubc84\uc2ed"]
+  },
+  {
+    "company": "Hyundai Card via Saramin",
+    "fixedCompany": "\ud604\ub300\uce74\ub4dc",
+    "source": "Saramin",
+    "tier": 2,
+    "url": "https://www.saramin.co.kr/zf_user/search?searchword=%ED%98%84%EB%8C%80%EC%B9%B4%EB%93%9C",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\ud540\ud14c\ud06c", "\uba64\ubc84\uc2ed"]
+  },
+  {
     "company": "CJ Group",
     "tier": 2,
     "url": "https://recruit.cj.net/",

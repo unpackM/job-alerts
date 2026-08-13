@@ -1,11 +1,11 @@
 $ErrorActionPreference = "Stop"
 
 $taskName = "Sonny Job Alerts"
-$scriptPath = Join-Path $PSScriptRoot "run-once.ps1"
+$scriptPath = Join-Path $PSScriptRoot "run-hidden.vbs"
 
 $action = New-ScheduledTaskAction `
-  -Execute "powershell.exe" `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+  -Execute "wscript.exe" `
+  -Argument "`"$scriptPath`""
 
 $triggers = @(
   New-ScheduledTaskTrigger -Daily -At 09:00

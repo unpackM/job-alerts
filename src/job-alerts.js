@@ -15,106 +15,125 @@ const execFileAsync = promisify(execFile);
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const telegramTest = args.has("--telegram-test");
+const loop = args.has("--loop");
 
 await loadEnv();
 
-const minScore = Number(process.env.JOB_ALERTS_MIN_SCORE || 70);
+const minScore = Number(process.env.JOB_ALERTS_MIN_SCORE || 60);
 const dailySummaryScore = Number(process.env.JOB_ALERTS_DAILY_SUMMARY_SCORE || 50);
 
 if (telegramTest) {
   await sendTelegram("job-alerts Telegram 연결 테스트입니다.");
   console.log("Telegram test message sent.");
-  process.exit(0);
+  process.exitCode = 0;
 }
 
-const targets = await readJson(path.join(rootDir, "config", "targets.json"));
-const keywords = await readJson(path.join(rootDir, "config", "keywords.json"));
-const db = await readDb();
+if (!telegramTest) {
+do {
+  await runOnce();
+  if (!loop) break;
+  const base = Number(process.env.JOB_ALERTS_INTERVAL_SECONDS || 10800);
+  const jitter = Math.floor(Math.random() * Number(process.env.JOB_ALERTS_JITTER_SECONDS || 600));
+  await sleep((base + jitter) * 1000);
+} while (true);
+}
 
-const runStartedAt = new Date().toISOString();
-const detectedJobs = [];
-const errors = [];
+async function runOnce() {
+  const targets = await readJson(path.join(rootDir, "config", "targets.json"));
+  const keywords = await readJson(path.join(rootDir, "config", "keywords.json"));
+  const db = await readDb();
 
-for (const target of targets) {
-  try {
-    const html = await fetchText(target.url);
-    const candidates = extractJobCandidates(html, target);
-    for (const candidate of candidates) {
-      const job = scoreJob(candidate, keywords);
-      if (job.score >= dailySummaryScore) {
-        detectedJobs.push(job);
+  const runStartedAt = new Date().toISOString();
+  const detectedJobs = [];
+  const errors = [];
+
+  for (const target of targets) {
+    try {
+      const html = await fetchText(target.url);
+      const candidates = extractJobCandidates(html, target);
+      for (const candidate of candidates) {
+        const job = scoreJob(candidate, keywords);
+        if (job.score >= dailySummaryScore) {
+          detectedJobs.push(job);
+        }
+      }
+    } catch (error) {
+      errors.push({
+        company: target.company,
+        url: target.url,
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  const newJobs = [];
+  for (const job of dedupeJobs(detectedJobs)) {
+    if (!db.jobs[job.id]) {
+      db.jobs[job.id] = {
+        ...job,
+        status: "new",
+        firstDetectedAt: runStartedAt,
+        lastSeenAt: runStartedAt,
+        notifiedAt: null
+      };
+      newJobs.push(db.jobs[job.id]);
+    } else {
+      db.jobs[job.id].company = job.company;
+      db.jobs[job.id].title = job.title;
+      db.jobs[job.id].url = job.url;
+      db.jobs[job.id].source = job.source;
+      db.jobs[job.id].lastSeenAt = runStartedAt;
+      db.jobs[job.id].score = job.score;
+      db.jobs[job.id].matchedKeywords = job.matchedKeywords;
+      db.jobs[job.id].snippet = job.snippet;
+    }
+  }
+
+  const alertJobs = Object.values(db.jobs)
+    .filter((job) => job.lastSeenAt === runStartedAt && !job.notifiedAt)
+    .filter((job) => job.score >= minScore)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20);
+
+  if (alertJobs.length > 0) {
+    const message = formatTelegramMessage(alertJobs, errors);
+    if (dryRun) {
+      console.log(message);
+    } else if (!hasTelegramConfig()) {
+      console.log(message);
+      console.log("Telegram/GitHub relay config is missing. Set TELEGRAM_* or TELEGRAM_VIA_GITHUB=1 with GH_TOKEN.");
+    } else {
+      await sendTelegram(message);
+      for (const job of alertJobs) {
+        db.jobs[job.id].status = "notified";
+        db.jobs[job.id].notifiedAt = new Date().toISOString();
       }
     }
-  } catch (error) {
-    errors.push({
-      company: target.company,
-      url: target.url,
-      message: error instanceof Error ? error.message : String(error)
-    });
   }
+
+  db.runs.unshift({
+    startedAt: runStartedAt,
+    targets: targets.length,
+    detected: detectedJobs.length,
+    newJobs: newJobs.length,
+    alerted: alertJobs.length,
+    errors
+  });
+  db.runs = db.runs.slice(0, 100);
+
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(dbPath, `${JSON.stringify(db, null, 2)}\n`, "utf8");
+
+  console.log(JSON.stringify({
+    startedAt: runStartedAt,
+    targets: targets.length,
+    detected: detectedJobs.length,
+    newJobs: newJobs.length,
+    alerted: alertJobs.length,
+    errors: errors.length,
+    dbPath
+  }, null, 2));
 }
-
-const newJobs = [];
-for (const job of dedupeJobs(detectedJobs)) {
-  if (!db.jobs[job.id]) {
-    db.jobs[job.id] = {
-      ...job,
-      status: "new",
-      firstDetectedAt: runStartedAt,
-      lastSeenAt: runStartedAt,
-      notifiedAt: null
-    };
-    newJobs.push(db.jobs[job.id]);
-  } else {
-    db.jobs[job.id].lastSeenAt = runStartedAt;
-    db.jobs[job.id].score = job.score;
-    db.jobs[job.id].matchedKeywords = job.matchedKeywords;
-    db.jobs[job.id].snippet = job.snippet;
-  }
-}
-
-const alertJobs = newJobs
-  .filter((job) => job.score >= minScore)
-  .sort((a, b) => b.score - a.score)
-  .slice(0, 20);
-
-if (alertJobs.length > 0) {
-  const message = formatTelegramMessage(alertJobs, errors);
-  if (dryRun) {
-    console.log(message);
-  } else if (!hasTelegramConfig()) {
-    console.log(message);
-    console.log("Telegram config is missing. Fill TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env to enable alerts.");
-  } else {
-    await sendTelegram(message);
-    for (const job of alertJobs) {
-      db.jobs[job.id].status = "notified";
-      db.jobs[job.id].notifiedAt = new Date().toISOString();
-    }
-  }
-}
-
-db.runs.unshift({
-  startedAt: runStartedAt,
-  targets: targets.length,
-  detected: detectedJobs.length,
-  newJobs: newJobs.length,
-  alerted: alertJobs.length,
-  errors
-});
-db.runs = db.runs.slice(0, 100);
-
-await fs.mkdir(dataDir, { recursive: true });
-await fs.writeFile(dbPath, `${JSON.stringify(db, null, 2)}\n`, "utf8");
-
-console.log(JSON.stringify({
-  targets: targets.length,
-  detected: detectedJobs.length,
-  newJobs: newJobs.length,
-  alerted: alertJobs.length,
-  errors: errors.length,
-  dbPath
-}, null, 2));
 
 async function loadEnv() {
   try {
@@ -172,7 +191,8 @@ async function fetchText(url) {
         url
       ], {
         maxBuffer: 8 * 1024 * 1024,
-        encoding: "utf8"
+        encoding: "utf8",
+        windowsHide: true
       });
       if (!stdout || stdout.length < 100) {
         throw new Error("empty curl response");
@@ -213,15 +233,21 @@ function extractJobCandidates(html, target) {
 
   const jobLike = lines.filter((line) => jobPattern.test(line));
 
-  return jobLike.filter((line) => !isNoiseLine(line)).slice(0, 80).map((line) => ({
-    company: target.company,
-    source: target.company,
-    url: target.url,
-    title: guessTitle(line),
-    snippet: line,
-    targetTags: target.tags || [],
-    targetTier: target.tier || 3
-  }));
+  return jobLike.filter((line) => !isNoiseLine(line)).slice(0, 80).map((line) => {
+    const title = guessTitle(line);
+    const company = inferCompanyName(title, target);
+    if (!company) return null;
+    return {
+      company,
+      source: target.source || target.company,
+      url: target.url,
+      title,
+      snippet: line,
+      targetTags: target.tags || [],
+      targetTier: target.tier || 3,
+      targetFixedCompany: Boolean(target.fixedCompany)
+    };
+  }).filter(Boolean);
 }
 
 function htmlToText(html) {
@@ -248,6 +274,75 @@ function guessTitle(line) {
   return trimmed.length > 80 ? `${trimmed.slice(0, 77)}...` : trimmed;
 }
 
+function inferCompanyName(title, target) {
+  if (target.fixedCompany) return target.fixedCompany;
+
+  const cleanTitle = normalizeWhitespace(title);
+  const bracket = cleanTitle.match(/^\[([^\]]{2,40})\]/);
+  if (bracket && !isGenericCompanyLabel(bracket[1])) return bracket[1].trim();
+
+  const leadingKeywords = [
+    " \uc0ac\uc5c5 \uae30\ud68d",
+    " \uc0ac\uc5c5\uae30\ud68d",
+    " \uc0c1\ud488 \uae30\ud68d",
+    " \uc0c1\ud488\uae30\ud68d",
+    " \uc11c\ube44\uc2a4 \uae30\ud68d",
+    " \uc11c\ube44\uc2a4\uae30\ud68d",
+    " \uc804\ub7b5",
+    " Growth",
+    " PM",
+    " PO",
+    " \uc81c\ud734",
+    " \ud30c\ud2b8\ub108",
+    " \ucf58\ud150\uce20"
+  ];
+  const keywordIndex = leadingKeywords
+    .map((keyword) => cleanTitle.indexOf(keyword))
+    .filter((index) => index > 1 && index <= 40)
+    .sort((a, b) => a - b)[0];
+  if (keywordIndex) {
+    const prefix = cleanTitle.slice(0, keywordIndex).replace(/[|&\-·\s]+$/g, "").trim();
+    if (prefix.length >= 2 && !isGenericCompanyLabel(prefix)) return prefix;
+  }
+
+  const leading = cleanTitle.match(/^([\uac00-\ud7a3A-Za-z0-9&().\-\s]{2,30})\s+(?:\uc0ac\uc5c5|\uc0c1\ud488|\uc11c\ube44\uc2a4|\ube0c\ub79c\ub4dc|Growth|PM|PO|\uc804\ub7b5|\uc81c\ud734|\ud30c\ud2b8\ub108|\ucee4\uba38\uc2a4|\ucf58\ud150\uce20)/i);
+  if (leading && !isGenericCompanyLabel(leading[1])) return leading[1].trim();
+
+  const sourceCompany = normalizeSourceCompany(target.company);
+  if (isAggregatorSource(sourceCompany)) return "";
+  return sourceCompany || target.company;
+}
+
+function normalizeSourceCompany(company) {
+  return String(company || "")
+    .replace(/\s+-\s+(Business Planning|Partnership|Product Planning|Growth|Large Business Strategy)$/i, "")
+    .trim();
+}
+
+function isGenericCompanyLabel(value) {
+  const clean = String(value || "").trim();
+  if (/^(NOW|NEW)$/i.test(clean)) return true;
+  const genericTerms = [
+    "\uacbd\ub825",
+    "\uc815\uaddc\uc9c1",
+    "\uacc4\uc57d\uc9c1",
+    "\uc778\ud134",
+    "\uc2e0\uc785",
+    "\ucc44\uc6a9",
+    "\ubaa8\uc9d1",
+    "\uc5c5\uacc4",
+    "\uad6d\ub0b4",
+    "\ub300\uae30\uc5c5",
+    "\uc911\uacac\uae30\uc5c5",
+    "\ubcf8\uc0ac"
+  ];
+  return genericTerms.some((term) => clean.includes(term));
+}
+
+function isAggregatorSource(company) {
+  return /^(Saramin|Catch|Wanted|Remember)\b/i.test(String(company || "").trim());
+}
+
 function scoreJob(candidate, keywordConfig) {
   const haystack = `${candidate.company} ${candidate.title} ${candidate.snippet}`;
   const matchedKeywords = [];
@@ -255,6 +350,15 @@ function scoreJob(candidate, keywordConfig) {
 
   if (candidate.targetTier === 1) score += 25;
   if (candidate.targetTier === 2) score += 15;
+  const trustCompanySizeTags = candidate.targetTier <= 2 || candidate.targetFixedCompany;
+  if (trustCompanySizeTags && candidate.targetTags.includes("\ub300\uae30\uc5c5")) {
+    score += 14;
+    matchedKeywords.push("\ub300\uae30\uc5c5");
+  }
+  if (trustCompanySizeTags && candidate.targetTags.includes("\uc911\uacac\uae30\uc5c5")) {
+    score += 8;
+    matchedKeywords.push("\uc911\uacac\uae30\uc5c5");
+  }
   if (new RegExp("\\uacbd\\ub825|Experienced|Career", "i").test(haystack)) score += 20;
   if (new RegExp("\\uc815\\uaddc|Permanent", "i").test(haystack)) score += 8;
 
@@ -273,7 +377,7 @@ function scoreJob(candidate, keywordConfig) {
   }
 
   return {
-    id: stableId(`${candidate.company}|${candidate.title}|${candidate.url}`),
+    id: stableId(`${candidate.source}|${candidate.title}|${candidate.url}`),
     company: candidate.company,
     title: candidate.title,
     url: candidate.url,
@@ -300,6 +404,7 @@ function isNoiseLine(line) {
     /^NAVER Careers?$/i,
     /^Hyundai Motor Company Careers/i,
     /^(\uc0ac\uc5c5\uae30\ud68d|\uc81c\ud734|Growth PM)$/i,
+    /\ube45\uc2a4\ube44\uac00 \uc774\uac83\uae4c\uc9c0 \ud55c\ub2e4\uace0/i,
     /(\uac80\uc0c9\uacb0\uacfc|\uac80\uc0c9 \uacb0\uacfc|\ud1b5\ud569\uac80\uc0c9|\ucd1d [0-9,]+\uac74)/i,
     /(\ucc44\uc6a9\ud50c\ub7ab\ud3fc|\uc774\uc9c1|Onboarding|Search|Meta|Next\.js|Webpack)/i,
     /(\uc9c1\ubb34, \ud68c\uc0ac|\ud68c\uc0ac, \uc9c0\uc5ed|\uc5f0\ubd09\uc815\ubcf4|\uc774\ub825\uc11c|\uba74\uc811\uc81c\uc548)/i,
@@ -339,6 +444,7 @@ function formatTelegramMessage(jobs, errors) {
 
   for (const job of jobs) {
     lines.push(`${job.company} | ${job.title}`);
+    if (job.source && job.source !== job.company) lines.push(`Source: ${job.source}`);
     lines.push(`${u("c810 c218")}: ${job.score} / ${u("d0a4 c6cc b4dc")}: ${job.matchedKeywords.slice(0, 8).join(", ") || "-"}`);
     lines.push(job.url);
     if (job.snippet && job.snippet !== job.title) lines.push(`${u("c694 c57d")}: ${job.snippet.slice(0, 160)}`);
@@ -357,10 +463,17 @@ function u(hexCodes) {
 }
 
 function hasTelegramConfig() {
+  if (process.env.TELEGRAM_VIA_GITHUB === "1") {
+    return Boolean(process.env.GH_TOKEN || process.env.GITHUB_TOKEN);
+  }
   return Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID);
 }
 
 async function sendTelegram(text) {
+  if (process.env.TELEGRAM_VIA_GITHUB === "1") {
+    return sendViaGitHub(text);
+  }
+
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) {
@@ -401,7 +514,8 @@ async function sendTelegram(text) {
         url
       ], {
         maxBuffer: 1024 * 1024,
-        encoding: "utf8"
+        encoding: "utf8",
+        windowsHide: true
       });
     } catch (curlError) {
       const fetchMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
@@ -409,4 +523,37 @@ async function sendTelegram(text) {
       throw new Error(`Telegram send failed: ${fetchMessage}; curl failed: ${curlMessage}`);
     }
   }
+}
+
+async function sendViaGitHub(text) {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const repo = process.env.GITHUB_RELAY_REPO || "unpackM/cgv-telegram-relay";
+  const workflow = process.env.GITHUB_RELAY_WORKFLOW || "send-telegram.yml";
+  if (!token) {
+    throw new Error("GITHUB_TOKEN or GH_TOKEN is required for TELEGRAM_VIA_GITHUB=1.");
+  }
+
+  const response = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`, {
+    method: "POST",
+    headers: {
+      "accept": "application/vnd.github+json",
+      "authorization": `Bearer ${token}`,
+      "content-type": "application/json",
+      "user-agent": "job-alerts"
+    },
+    body: JSON.stringify({
+      ref: "main",
+      inputs: { text }
+    })
+  });
+
+  if (response.status !== 204) {
+    throw new Error(`GitHub relay HTTP ${response.status}: ${await response.text()}`);
+  }
+
+  console.log(`[GITHUB RELAY] dispatched ${repo}/${workflow}`);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
