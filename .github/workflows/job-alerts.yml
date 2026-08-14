@@ -13,8 +13,12 @@ on:
           - summary-today
           - summary-yesterday
   schedule:
-    # Every 3 hours for silent collection. 00:00/09:00 UTC send 09:00/18:00 KST summaries.
-    - cron: "0 */3 * * *"
+    # Silent collection runs through the day.
+    - cron: "0 3,6,12,15,18,21 * * *"
+    # 09:00 KST: yesterday summary.
+    - cron: "0 0 * * *"
+    # 18:00 KST: today summary.
+    - cron: "0 9 * * *"
 
 jobs:
   run:
@@ -52,10 +56,9 @@ jobs:
               *) mode="--collect-only" ;;
             esac
           else
-            hour="$(date -u +%H)"
-            if [ "$hour" = "00" ]; then
+            if [ "${{ github.event.schedule }}" = "0 0 * * *" ]; then
               mode="--summary-yesterday"
-            elif [ "$hour" = "09" ]; then
+            elif [ "${{ github.event.schedule }}" = "0 9 * * *" ]; then
               mode="--summary-today"
             fi
           fi
