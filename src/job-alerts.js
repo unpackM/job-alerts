@@ -17,6 +17,7 @@ const dryRun = args.has("--dry-run");
 const telegramTest = args.has("--telegram-test");
 const loop = args.has("--loop");
 const collectOnly = args.has("--collect-only");
+const listAll = args.has("--list-all");
 const summaryYesterday = args.has("--summary-yesterday");
 const summaryToday = args.has("--summary-today");
 const summaryMode = summaryYesterday || summaryToday;
@@ -34,7 +35,7 @@ if (telegramTest) {
 
 if (!telegramTest) {
 do {
-  await runOnce({ collectOnly, summaryYesterday, summaryToday, summaryMode });
+  await runOnce({ collectOnly, listAll, summaryYesterday, summaryToday, summaryMode });
   if (!loop) break;
   const base = Number(process.env.JOB_ALERTS_INTERVAL_SECONDS || 10800);
   const jitter = Math.floor(Math.random() * Number(process.env.JOB_ALERTS_JITTER_SECONDS || 600));
@@ -93,7 +94,25 @@ async function runOnce(options = {}) {
     }
   }
 
-  const alertJobs = options.collectOnly || options.summaryMode ? [] : Object.values(db.jobs)
+  if (options.listAll) {
+    const listJobs = detectedJobs
+      .filter((job) => job.score >= minScore)
+      .sort((a, b) => b.score - a.score);
+    const messages = formatListMessages(listJobs, errors);
+    if (dryRun) {
+      console.log(messages.join("\n\n---\n\n"));
+    } else if (!hasTelegramConfig()) {
+      console.log(messages.join("\n\n---\n\n"));
+      console.log("Telegram/GitHub relay config is missing.");
+    } else {
+      for (const message of messages) {
+        await sendTelegram(message);
+        await sleep(1000);
+      }
+    }
+  }
+
+  const alertJobs = options.collectOnly || options.summaryMode || options.listAll ? [] : Object.values(db.jobs)
     .filter((job) => job.lastSeenAt === runStartedAt && !job.notifiedAt)
     .filter((job) => job.score >= minScore)
     .sort((a, b) => b.score - a.score)
@@ -162,13 +181,19 @@ async function runOnce(options = {}) {
     }
   }
 
+  const mode = options.summaryYesterday ? "summary-yesterday"
+    : options.summaryToday ? "summary-today"
+    : options.collectOnly ? "collect-only"
+    : options.listAll ? "list-all"
+    : "immediate-alert";
+
   db.runs.unshift({
     startedAt: runStartedAt,
     targets: targets.length,
     detected: detectedJobs.length,
     newJobs: newJobs.length,
     alerted: alertJobs.length,
-    mode: options.summaryYesterday ? "summary-yesterday" : options.summaryToday ? "summary-today" : options.collectOnly ? "collect-only" : "immediate-alert",
+    mode,
     summaryJobs: summaryJobs.length,
     summarySent,
     errors
@@ -184,7 +209,7 @@ async function runOnce(options = {}) {
     detected: detectedJobs.length,
     newJobs: newJobs.length,
     alerted: alertJobs.length,
-    mode: options.summaryYesterday ? "summary-yesterday" : options.summaryToday ? "summary-today" : options.collectOnly ? "collect-only" : "immediate-alert",
+    mode,
     summaryJobs: summaryJobs.length,
     summarySent,
     errors: errors.length,
@@ -263,48 +288,221 @@ async function fetchText(url) {
   }
 }
 
+const JOB_PATTERN = new RegExp([
+  "\\ucc44\\uc6a9",
+  "\\ubaa8\\uc9d1",
+  "\\uacbd\\ub825",
+  "Experienced",
+  "Career",
+  "Business",
+  "Manager",
+  "PM",
+  "\\uc804\\ub7b5",
+  "\\uae30\\ud68d",
+  "\\uc81c\\ud734",
+  "\\ud30c\\ud2b8\\ub108",
+  "Growth",
+  "\\uba64\\ubc84\\uc2ed",
+  "\\uad6c\\ub3c5"
+].join("|"), "i");
+
 function extractJobCandidates(html, target) {
+  const isAggregator = isAggregatorSource(target.source || target.company);
+
+  // For aggregator sites, try structured HTML parsing first
+  if (isAggregator) {
+    const structured = extractStructuredCards(html, target);
+    if (structured.length > 0) return structured;
+  }
+
   const cleanText = htmlToText(html);
-  const lines = cleanText
+  const allLines = cleanText
     .split(/\n+/)
     .map((line) => normalizeWhitespace(line))
-    .filter((line) => line.length >= 8 && line.length <= 220);
+    .filter((line) => line.length >= 2 && line.length <= 220);
 
-  const jobPattern = new RegExp([
-    "\\ucc44\\uc6a9",
-    "\\ubaa8\\uc9d1",
-    "\\uacbd\\ub825",
-    "Experienced",
-    "Career",
-    "Business",
-    "Manager",
-    "PM",
-    "\\uc804\\ub7b5",
-    "\\uae30\\ud68d",
-    "\\uc81c\\ud734",
-    "\\ud30c\\ud2b8\\ub108",
-    "Growth",
-    "\\uba64\\ubc84\\uc2ed",
-    "\\uad6c\\ub3c5"
-  ].join("|"), "i");
+  return allLines
+    .map((line, idx) => {
+      if (line.length < 8) return null;
+      if (!JOB_PATTERN.test(line)) return null;
+      if (isNoiseLine(line)) return null;
 
-  const jobLike = lines.filter((line) => jobPattern.test(line));
+      const title = guessTitle(line);
+      const company = isAggregator
+        ? findCompanyInContext(allLines, idx)
+        : inferCompanyName(title, target);
+      if (!company) return null;
 
-  return jobLike.filter((line) => !isNoiseLine(line)).slice(0, 80).map((line) => {
-    const title = guessTitle(line);
-    const company = inferCompanyName(title, target);
-    if (!company) return null;
-    return {
-      company,
+      return {
+        company,
+        source: target.source || target.company,
+        url: target.url,
+        title,
+        snippet: line,
+        targetTags: target.tags || [],
+        targetTier: target.tier || 3,
+        targetFixedCompany: Boolean(target.fixedCompany)
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 80);
+}
+
+function extractStructuredCards(html, target) {
+  const source = target.source || target.company || "";
+  let pairs = [];
+
+  if (/saramin/i.test(source)) {
+    pairs = parseSaraminCards(html);
+  } else if (/catch/i.test(source)) {
+    pairs = parseCatchCards(html);
+  } else if (/wanted/i.test(source)) {
+    pairs = parseWantedCards(html);
+  } else if (/remember/i.test(source)) {
+    pairs = parseRememberCards(html);
+  }
+
+  return pairs
+    .filter((p) => p.company && p.title && p.title.length >= 5)
+    .filter((p) => !isGenericCompanyLabel(p.company))
+    .filter((p) => !isNoiseLine(p.title))
+    .map((p) => ({
+      company: p.company,
       source: target.source || target.company,
       url: target.url,
-      title,
-      snippet: line,
+      title: guessTitle(p.title),
+      snippet: p.title,
       targetTags: target.tags || [],
       targetTier: target.tier || 3,
-      targetFixedCompany: Boolean(target.fixedCompany)
-    };
-  }).filter(Boolean);
+      targetFixedCompany: false
+    }));
+}
+
+function extractClassText(html, className) {
+  const re = new RegExp(`class="[^"]*${className}[^"]*"[^>]*>([\\s\\S]{0,400}?)(?=<\\/(?:strong|h[1-6]|a|span|div|p)>)`, "i");
+  const m = html.match(re);
+  if (!m) return "";
+  return htmlToText(m[1]).replace(/\s+/g, " ").trim().slice(0, 60);
+}
+
+function parseSaraminCards(html) {
+  const cards = [];
+  // Each job item in Saramin is wrapped in item_recruit
+  const itemRe = /class="[^"]*item_recruit[^"]*"([\s\S]{0,3000}?)(?=class="[^"]*item_recruit|<\/ul>|<\/section>)/g;
+  for (const m of html.matchAll(itemRe)) {
+    const block = m[1];
+    const company = extractClassText(block, "corp_name");
+    const title = extractClassText(block, "job_tit");
+    if (company && title) cards.push({ company, title });
+  }
+  if (cards.length === 0) {
+    // Fallback: corp_name then job_tit in order
+    const re = /class="corp_name"[^>]*>[\s\S]{0,200}?<a[^>]*>([\s\S]{0,60}?)<\/a>[\s\S]{0,1000}?class="job_tit"[^>]*>[\s\S]{0,200}?<a[^>]*>([\s\S]{0,200}?)<\/a>/g;
+    for (const m of html.matchAll(re)) {
+      const company = htmlToText(m[1]).replace(/\s+/g, " ").trim();
+      const title = htmlToText(m[2]).replace(/\s+/g, " ").trim();
+      if (company && title) cards.push({ company, title });
+    }
+  }
+  return cards;
+}
+
+function parseCatchCards(html) {
+  const cards = [];
+  const re = /class="[^"]*(?:company[-_]?name|corp[-_]?name|company)[^"]*"[^>]*>([\s\S]{0,300}?)(?=<\/(?:strong|a|span|p|div)>)[\s\S]{0,1000}?class="[^"]*(?:job[-_]?tit|position[-_]?name|job[-_]?title|title)[^"]*"[^>]*>([\s\S]{0,300}?)(?=<\/(?:h[1-6]|a|p|div)>)/gi;
+  for (const m of html.matchAll(re)) {
+    const company = htmlToText(m[1]).replace(/\s+/g, " ").trim();
+    const title = htmlToText(m[2]).replace(/\s+/g, " ").trim();
+    if (company && title) cards.push({ company, title });
+  }
+  return cards;
+}
+
+function parseWantedCards(html) {
+  const cards = [];
+  // Wanted SSR: look for JSON data in script tags
+  const jsonRe = /<script[^>]*>([\s\S]{0,50000}?)<\/script>/g;
+  for (const m of html.matchAll(jsonRe)) {
+    const text = m[1];
+    if (!text.includes('"company"') && !text.includes('"position"')) continue;
+    try {
+      const jobMatches = text.matchAll(/"company"\s*:\s*\{[^}]*"name"\s*:\s*"([^"]+)"[^}]*\}[\s\S]{0,500}?"title"\s*:\s*"([^"]+)"/g);
+      for (const jm of jobMatches) {
+        cards.push({ company: jm[1], title: jm[2] });
+      }
+    } catch {}
+  }
+  // HTML fallback for Wanted
+  if (cards.length === 0) {
+    const re = /class="[^"]*(?:company[-_]?name)[^"]*"[^>]*>([\s\S]{0,200}?)<\/[\s\S]{0,20}>[\s\S]{0,500}?class="[^"]*(?:job[-_]?title|position)[^"]*"[^>]*>([\s\S]{0,200}?)<\//gi;
+    for (const m of html.matchAll(re)) {
+      const company = htmlToText(m[1]).replace(/\s+/g, " ").trim();
+      const title = htmlToText(m[2]).replace(/\s+/g, " ").trim();
+      if (company && title) cards.push({ company, title });
+    }
+  }
+  return cards;
+}
+
+function parseRememberCards(html) {
+  const cards = [];
+  // Remember SSR: look for JSON-LD or embedded data
+  const jsonRe = /<script[^>]*type="application\/json"[^>]*>([\s\S]{0,100000}?)<\/script>/g;
+  for (const m of html.matchAll(jsonRe)) {
+    try {
+      const data = JSON.parse(m[1]);
+      const postings = findJobPostings(data);
+      for (const p of postings) {
+        if (p.company && p.title) cards.push(p);
+      }
+    } catch {}
+  }
+  // HTML fallback
+  if (cards.length === 0) {
+    const re = /class="[^"]*(?:company[-_]?name|corp)[^"]*"[^>]*>([\s\S]{0,200}?)<\/[\s\S]{0,20}>[\s\S]{0,800}?class="[^"]*(?:job[-_]?title|position[-_]?title)[^"]*"[^>]*>([\s\S]{0,200}?)<\//gi;
+    for (const m of html.matchAll(re)) {
+      const company = htmlToText(m[1]).replace(/\s+/g, " ").trim();
+      const title = htmlToText(m[2]).replace(/\s+/g, " ").trim();
+      if (company && title) cards.push({ company, title });
+    }
+  }
+  return cards;
+}
+
+function findJobPostings(obj, depth = 0) {
+  if (depth > 6 || !obj || typeof obj !== "object") return [];
+  const results = [];
+  if (obj.company && obj.title && typeof obj.company === "string") {
+    results.push({ company: obj.company, title: obj.title });
+  }
+  if (obj.companyName && obj.positionName) {
+    results.push({ company: obj.companyName, title: obj.positionName });
+  }
+  for (const val of Object.values(obj)) {
+    if (Array.isArray(val)) {
+      for (const item of val) results.push(...findJobPostings(item, depth + 1));
+    } else if (val && typeof val === "object") {
+      results.push(...findJobPostings(val, depth + 1));
+    }
+  }
+  return results;
+}
+
+function findCompanyInContext(lines, titleIdx) {
+  for (let i = titleIdx - 1; i >= Math.max(0, titleIdx - 10); i--) {
+    const candidate = lines[i];
+    if (!candidate || candidate.length < 2 || candidate.length > 40) continue;
+    if (isGenericCompanyLabel(candidate)) continue;
+    if (isNoiseLine(candidate)) continue;
+    if (/[.!?]$/.test(candidate)) continue;
+    if (/^\d+$/.test(candidate)) continue;
+    if (candidate.split(/\s+/).length > 5) continue;
+    if (!/[가-힣A-Za-z]/.test(candidate)) continue;
+    // Doesn't look like a job posting line itself
+    if (JOB_PATTERN.test(candidate)) continue;
+    return candidate;
+  }
+  return "";
 }
 
 function htmlToText(html) {
@@ -491,6 +689,50 @@ function stableId(text) {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(16);
+}
+
+function formatListMessages(jobs, errors) {
+  const now = formatKstDateTime(new Date().toISOString());
+  const header = `[채용 알림] ${now} 기준 매칭 목록 (${jobs.length}건)`;
+
+  if (jobs.length === 0) {
+    const msg = [header, "", "현재 조건에 맞는 공고 없음"];
+    if (errors.length > 0) msg.push("", `수집 실패: ${errors.length}개 사이트`);
+    return [msg.join("\n")];
+  }
+
+  const chunks = [];
+  let current = [header, ""];
+
+  for (const [i, job] of jobs.entries()) {
+    const sourceLine = job.source && job.source !== job.company ? ` (${job.source})` : "";
+    const block = [
+      `${i + 1}. ${job.company}${sourceLine}`,
+      `   ${job.title}`,
+      `   ${job.url}`,
+      ""
+    ];
+
+    if ([...current, ...block].join("\n").length > 3200 && current.length > 2) {
+      chunks.push(current.join("\n").slice(0, 3900));
+      current = [`${header} (계속)`, "", ...block];
+    } else {
+      current.push(...block);
+    }
+  }
+
+  if (errors.length > 0) {
+    const footerLine = `수집 실패: ${errors.length}개 사이트`;
+    if ([...current, footerLine].join("\n").length > 3800) {
+      chunks.push(current.join("\n").slice(0, 3900));
+      current = [footerLine];
+    } else {
+      current.push(footerLine);
+    }
+  }
+
+  chunks.push(current.join("\n").slice(0, 3900));
+  return chunks;
 }
 
 function formatTelegramMessage(jobs, errors) {

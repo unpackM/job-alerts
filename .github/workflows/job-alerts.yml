@@ -6,18 +6,19 @@ on:
       mode:
         description: "Run mode"
         required: false
-        default: "summary-today"
+        default: "list-all"
         type: choice
         options:
+          - list-all
           - collect-only
           - summary-today
           - summary-yesterday
   schedule:
-    # Silent collection runs through the day.
-    - cron: "0 3,6,12,15,18,21 * * *"
-    # 09:00 KST: yesterday summary.
+    # 09:00 KST
     - cron: "0 0 * * *"
-    # 18:00 KST: today summary.
+    # 13:00 KST
+    - cron: "0 4 * * *"
+    # 18:00 KST
     - cron: "0 9 * * *"
 
 jobs:
@@ -48,19 +49,15 @@ jobs:
         id: mode
         shell: bash
         run: |
-          mode="--collect-only"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             case "${{ github.event.inputs.mode }}" in
+              collect-only)      mode="--collect-only" ;;
               summary-yesterday) mode="--summary-yesterday" ;;
-              summary-today) mode="--summary-today" ;;
-              *) mode="--collect-only" ;;
+              summary-today)     mode="--summary-today" ;;
+              *)                 mode="--list-all" ;;
             esac
           else
-            if [ "${{ github.event.schedule }}" = "0 0 * * *" ]; then
-              mode="--summary-yesterday"
-            elif [ "${{ github.event.schedule }}" = "0 9 * * *" ]; then
-              mode="--summary-today"
-            fi
+            mode="--list-all"
           fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
 
