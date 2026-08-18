@@ -27,6 +27,24 @@ await loadEnv();
 const minScore = Number(process.env.JOB_ALERTS_MIN_SCORE || 60);
 const dailySummaryScore = Number(process.env.JOB_ALERTS_DAILY_SUMMARY_SCORE || 50);
 
+const JOB_PATTERN = new RegExp([
+  "\\ucc44\\uc6a9",
+  "\\ubaa8\\uc9d1",
+  "\\uacbd\\ub825",
+  "Experienced",
+  "Career",
+  "Business",
+  "Manager",
+  "PM",
+  "\\uc804\\ub7b5",
+  "\\uae30\\ud68d",
+  "\\uc81c\\ud734",
+  "\\ud30c\\ud2b8\\ub108",
+  "Growth",
+  "\\uba64\\ubc84\\uc2ed",
+  "\\uad6c\\ub3c5"
+].join("|"), "i");
+
 if (telegramTest) {
   await sendTelegram("job-alerts Telegram 연결 테스트입니다.");
   console.log("Telegram test message sent.");
@@ -287,24 +305,6 @@ async function fetchText(url) {
     }
   }
 }
-
-const JOB_PATTERN = new RegExp([
-  "\\ucc44\\uc6a9",
-  "\\ubaa8\\uc9d1",
-  "\\uacbd\\ub825",
-  "Experienced",
-  "Career",
-  "Business",
-  "Manager",
-  "PM",
-  "\\uc804\\ub7b5",
-  "\\uae30\\ud68d",
-  "\\uc81c\\ud734",
-  "\\ud30c\\ud2b8\\ub108",
-  "Growth",
-  "\\uba64\\ubc84\\uc2ed",
-  "\\uad6c\\ub3c5"
-].join("|"), "i");
 
 function extractJobCandidates(html, target) {
   const isAggregator = isAggregatorSource(target.source || target.company);
