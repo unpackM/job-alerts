@@ -12,6 +12,14 @@ const dbPath = path.join(dataDir, "jobs-db.json");
 const envPath = path.join(rootDir, ".env");
 const execFileAsync = promisify(execFile);
 
+// A UA that self-identifies as a bot, with no Accept-Language/browser headers, is
+// exactly what WAFs (Coupang/Catch/Wanted/Remember all run one) key off to 403 us.
+// Declared up here (not next to fetchText) because runOnce() is invoked from the
+// top-level do-while below before the engine would otherwise reach this line.
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const CURL_BIN = process.platform === "win32" ? "curl.exe" : "curl";
+
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const telegramTest = args.has("--telegram-test");
@@ -264,12 +272,6 @@ async function readDb() {
     return { jobs: {}, runs: [] };
   }
 }
-
-// A UA that self-identifies as a bot, with no Accept-Language/browser headers, is
-// exactly what WAFs (Coupang/Catch/Wanted/Remember all run one) key off to 403 us.
-const BROWSER_USER_AGENT =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
-const CURL_BIN = process.platform === "win32" ? "curl.exe" : "curl";
 
 async function fetchText(url) {
   try {
