@@ -231,6 +231,7 @@ async function runOnce(options = {}) {
     summaryJobs: summaryJobs.length,
     summarySent,
     errors: errors.length,
+    errorDetail: errors,
     dbPath
   }, null, 2));
 }
