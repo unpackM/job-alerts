@@ -220,5 +220,33 @@
     "tier": 3,
     "url": "https://www.saramin.co.kr/zf_user/search?searchword=B2B%20%EA%B8%B0%ED%9A%8D%20%EA%B2%BD%EB%A0%A5",
     "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uc911\uacac\uae30\uc5c5", "B2B"]
+  },
+  {
+    "company": "Shinhan Bank",
+    "tier": 1,
+    "url": "https://shinhan.recruiter.co.kr/career/home",
+    "tags": ["\ub300\uae30\uc5c5", "\uae08\uc735", "\uc740\ud589"]
+  },
+  {
+    "company": "Hana Bank",
+    "tier": 1,
+    "url": "https://hanabank.recruiter.co.kr/career/home",
+    "tags": ["\ub300\uae30\uc5c5", "\uae08\uc735", "\uc740\ud589"]
+  },
+  {
+    "company": "KB Financial Group via Saramin",
+    "fixedCompany": "KB\uae08\uc735\uadf8\ub8f9",
+    "source": "Saramin",
+    "tier": 2,
+    "url": "https://www.saramin.co.kr/zf_user/search?searchword=KB%EA%B8%88%EC%9C%B5%EA%B7%B8%EB%A3%B9",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uae08\uc735"]
+  },
+  {
+    "company": "Hanwha Life via Saramin",
+    "fixedCompany": "\ud55c\ud654\uc0dd\uba85",
+    "source": "Saramin",
+    "tier": 2,
+    "url": "https://www.saramin.co.kr/zf_user/search?searchword=%ED%95%9C%ED%99%94%EC%83%9D%EB%AA%85",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uae08\uc735", "\ubcf4\ud5d8"]
   }
 ]
