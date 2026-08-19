@@ -77,8 +77,13 @@ async function runOnce(options = {}) {
   const runStartedAt = new Date().toISOString();
   const detectedJobs = [];
   const errors = [];
+  const requestDelayMs = Number(process.env.JOB_ALERTS_REQUEST_DELAY_MS || 900);
 
-  for (const target of targets) {
+  for (const [index, target] of targets.entries()) {
+    // Saramin/Catch/Wanted/Remember each get hit by several targets in a row;
+    // firing them back-to-back with no gap reads as a scrape burst and their
+    // WAF starts timing out the connection instead of responding.
+    if (index > 0) await sleep(requestDelayMs + Math.floor(Math.random() * 400));
     try {
       const html = await fetchText(target.url);
       const candidates = extractJobCandidates(html, target);
