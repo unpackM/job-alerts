@@ -379,7 +379,10 @@ function extractStructuredCards(html, target) {
 }
 
 function extractClassText(html, className) {
-  const re = new RegExp(`class="[^"]*${className}[^"]*"[^>]*>([\\s\\S]{0,400}?)(?=<\\/(?:strong|h[1-6]|a|span|div|p)>)`, "i");
+  // Saramin wraps titles in an <a> whose tracking href alone can run 300-500+ chars
+  // before the visible text, so this needs real headroom or the lazy match never
+  // reaches a qualifying closing tag and silently returns "".
+  const re = new RegExp(`class="[^"]*${className}[^"]*"[^>]*>([\\s\\S]{0,1000}?)(?=<\\/(?:strong|h[1-6]|a|span|div|p)>)`, "i");
   const m = html.match(re);
   if (!m) return "";
   return htmlToText(m[1]).replace(/\s+/g, " ").trim().slice(0, 60);
@@ -387,8 +390,11 @@ function extractClassText(html, className) {
 
 function parseSaraminCards(html) {
   const cards = [];
-  // Each job item in Saramin is wrapped in item_recruit
-  const itemRe = /class="[^"]*item_recruit[^"]*"([\s\S]{0,3000}?)(?=class="[^"]*item_recruit|<\/ul>|<\/section>)/g;
+  // Each job item in Saramin is wrapped in item_recruit. Real blocks run ~5,500-6,000
+  // chars (badges/scrap/apply buttons/category tags before the company block), so a
+  // 3000 cap made every block match fail and silently fall through to a much worse
+  // generic-text heuristic that couldn't reliably find the company name.
+  const itemRe = /class="[^"]*item_recruit[^"]*"([\s\S]{0,9000}?)(?=class="[^"]*item_recruit|<\/ul>|<\/section>)/g;
   for (const m of html.matchAll(itemRe)) {
     const block = m[1];
     const company = extractClassText(block, "corp_name");
