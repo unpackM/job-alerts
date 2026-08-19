@@ -69,6 +69,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           JOB_ALERTS_MIN_SCORE: "60"
           JOB_ALERTS_DAILY_SUMMARY_SCORE: "50"
         run: node src/job-alerts.js ${{ steps.mode.outputs.mode }}
