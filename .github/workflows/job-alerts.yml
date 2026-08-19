@@ -6,9 +6,10 @@ on:
       mode:
         description: "Run mode"
         required: false
-        default: "list-all"
+        default: "immediate-alert"
         type: choice
         options:
+          - immediate-alert
           - list-all
           - collect-only
           - summary-today
@@ -51,13 +52,16 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             case "${{ github.event.inputs.mode }}" in
+              list-all)          mode="--list-all" ;;
               collect-only)      mode="--collect-only" ;;
               summary-yesterday) mode="--summary-yesterday" ;;
               summary-today)     mode="--summary-today" ;;
-              *)                 mode="--list-all" ;;
+              *)                 mode="" ;;
             esac
           else
-            mode="--list-all"
+            # Scheduled runs only alert on newly detected postings, never resend
+            # the full matching list, so the same job isn't pushed 3x/day.
+            mode=""
           fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
 
