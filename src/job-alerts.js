@@ -126,9 +126,9 @@ async function runOnce(options = {}) {
   }
 
   if (options.listAll) {
-    const listJobs = detectedJobs
-      .filter((job) => job.score >= minScore)
-      .sort((a, b) => b.score - a.score);
+    const listJobs = await refineWithLLM(
+      detectedJobs.filter((job) => job.score >= minScore).sort((a, b) => b.score - a.score)
+    ).then((jobs) => jobs.filter((job) => job.llmRelevant !== false));
     const messages = formatListMessages(listJobs, errors);
     if (dryRun) {
       console.log(messages.join("\n\n---\n\n"));
@@ -143,11 +143,22 @@ async function runOnce(options = {}) {
     }
   }
 
-  const alertJobs = options.collectOnly || options.summaryMode || options.listAll ? [] : Object.values(db.jobs)
-    .filter((job) => job.lastSeenAt === runStartedAt && !job.notifiedAt)
+  const alertCandidates = options.collectOnly || options.summaryMode || options.listAll ? [] : Object.values(db.jobs)
+    .filter((job) => job.lastSeenAt === runStartedAt && !job.notifiedAt && job.status !== "llm-rejected")
     .filter((job) => job.score >= minScore)
     .sort((a, b) => b.score - a.score)
     .slice(0, 20);
+  const refinedCandidates = await refineWithLLM(alertCandidates);
+  const alertJobs = refinedCandidates.filter((job) => job.llmRelevant !== false);
+
+  // Judged-and-rejected postings stay live on the source site, so without this
+  // they'd be re-sent to the LLM (and cost a token) on every future run forever.
+  for (const job of refinedCandidates) {
+    if (job.llmRelevant === false) {
+      db.jobs[job.id].status = "llm-rejected";
+      db.jobs[job.id].llmReason = job.llmReason || null;
+    }
+  }
 
   if (alertJobs.length > 0) {
     const message = formatTelegramMessage(alertJobs, errors);
@@ -667,6 +678,86 @@ function scoreJob(candidate, keywordConfig) {
   };
 }
 
+const JOB_INTEREST_PROFILE = `사용자는 사업기획, 상품기획, 제휴/파트너십, Business Development, Growth PM,
+구독/멤버십/플랫폼/B2B/B2BC 도메인의 "경력직" 포지션에 관심이 있다.
+신입/인턴/계약직/영업·상담/개발자·디자이너 직군, 그리고 회사 소개·채용 안내·이용약관 같은
+네비게이션 텍스트가 공고 제목으로 잘못 긁힌 경우는 관심 대상이 아니다.`;
+
+// Keyword scoring is a blunt instrument (it can't tell "신입 채용 후 경력 전환"
+// apart from an actual 경력 posting, or a nav-link fragment from a real title).
+// This is a second, LLM-based pass over the small shortlist that already cleared
+// the keyword bar, to cut false positives before they hit Telegram. It fails
+// open: any missing key/network/parse error just returns jobs untouched so a
+// flaky API call never blocks real alerts.
+async function refineWithLLM(jobs) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || jobs.length === 0) return jobs;
+
+  const model = process.env.JOB_ALERTS_LLM_MODEL || "claude-haiku-4-5-20251001";
+  const payload = jobs.map((job, index) => ({
+    index,
+    company: job.company,
+    title: job.title,
+    snippet: (job.snippet || "").slice(0, 200)
+  }));
+
+  const prompt = `${JOB_INTEREST_PROFILE}
+
+아래는 키워드 매칭으로 1차로 걸러진 채용 공고 후보 목록이다 (JSON).
+각 항목에 대해 실제로 사용자 관심사에 맞는 경력직 공고인지 판단하라.
+
+${JSON.stringify(payload, null, 2)}
+
+각 항목마다 아래 형식의 객체로 이루어진 JSON 배열만 출력하라. 다른 텍스트는 출력하지 마라.
+[{"index": 0, "relevant": true, "score": 0-100, "reason": "10자 내외 한줄 이유"}, ...]`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4096,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+
+    if (!response.ok) {
+      console.warn(`[LLM SKIP] Anthropic API HTTP ${response.status}: ${await response.text()}`);
+      return jobs;
+    }
+
+    const data = await response.json();
+    const text = data.content?.map((block) => block.text || "").join("") || "";
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      console.warn("[LLM SKIP] no JSON array found in response");
+      return jobs;
+    }
+
+    const verdicts = JSON.parse(jsonMatch[0]);
+    const byIndex = new Map(verdicts.map((v) => [v.index, v]));
+
+    return jobs.map((job, index) => {
+      const verdict = byIndex.get(index);
+      if (!verdict) return job;
+      return {
+        ...job,
+        llmRelevant: Boolean(verdict.relevant),
+        llmScore: Number(verdict.score),
+        llmReason: String(verdict.reason || "").slice(0, 80)
+      };
+    });
+  } catch (error) {
+    console.warn(`[LLM SKIP] ${error instanceof Error ? error.message : String(error)}`);
+    return jobs;
+  }
+}
+
 function containsKeyword(text, keyword) {
   if (/^[A-Za-z0-9]{2,3}$/.test(keyword)) {
     return new RegExp(`(^|[^A-Za-z0-9])${escapeRegExp(keyword)}([^A-Za-z0-9]|$)`, "i").test(text);
@@ -771,6 +862,7 @@ function formatTelegramMessage(jobs, errors) {
     lines.push(`${u("c810 c218")}: ${job.score} / ${u("d0a4 c6cc b4dc")}: ${job.matchedKeywords.slice(0, 8).join(", ") || "-"}`);
     lines.push(job.url);
     if (job.snippet && job.snippet !== job.title) lines.push(`${u("c694 c57d")}: ${job.snippet.slice(0, 160)}`);
+    if (job.llmReason) lines.push(`AI: ${job.llmReason}`);
     lines.push("");
   }
 
