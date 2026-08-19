@@ -78,12 +78,33 @@ async function runOnce(options = {}) {
   const detectedJobs = [];
   const errors = [];
   const requestDelayMs = Number(process.env.JOB_ALERTS_REQUEST_DELAY_MS || 900);
+  const sameHostDelayMs = Number(process.env.JOB_ALERTS_SAME_HOST_DELAY_MS || 8000);
+  const lastRequestAtByHost = new Map();
 
   for (const [index, target] of targets.entries()) {
-    // Saramin/Catch/Wanted/Remember each get hit by several targets in a row;
-    // firing them back-to-back with no gap reads as a scrape burst and their
-    // WAF starts timing out the connection instead of responding.
-    if (index > 0) await sleep(requestDelayMs + Math.floor(Math.random() * 400));
+    // A flat inter-request delay was enough for ~6 same-domain hits, but adding
+    // 2 more Saramin targets (8 total) got every single one timed out — Saramin's
+    // WAF reads "same host, back-to-back" as a scrape burst regardless of gap
+    // size, so repeat hits to one host need a much longer minimum spacing than
+    // hits spread across different hosts.
+    let host;
+    try {
+      host = new URL(target.url).hostname;
+    } catch {
+      host = target.url;
+    }
+
+    if (index > 0) {
+      const lastAt = lastRequestAtByHost.get(host);
+      const now = Date.now();
+      if (lastAt !== undefined && now - lastAt < sameHostDelayMs) {
+        await sleep(sameHostDelayMs - (now - lastAt) + Math.floor(Math.random() * 500));
+      } else {
+        await sleep(requestDelayMs + Math.floor(Math.random() * 400));
+      }
+    }
+    lastRequestAtByHost.set(host, Date.now());
+
     try {
       const html = await fetchText(target.url);
       const candidates = extractJobCandidates(html, target);
