@@ -176,5 +176,49 @@
     "tier": 3,
     "url": "https://career.rememberapp.co.kr/job/postings?keyword=%EC%A0%9C%ED%9C%B4",
     "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\uc81c\ud734"]
+  },
+  {
+    "company": "Woowa Brothers (Baemin)",
+    "tier": 1,
+    "url": "https://career.woowahan.com/",
+    "tags": ["\ub300\uae30\uc5c5", "\ud50c\ub7ab\ud3fc", "\ucee4\uba38\uc2a4"]
+  },
+  {
+    "company": "Yanolja",
+    "tier": 1,
+    "url": "https://careers.yanolja.co/ko/home",
+    "tags": ["\ub300\uae30\uc5c5", "\ud50c\ub7ab\ud3fc", "\uad6c\ub3c5"]
+  },
+  {
+    "company": "Musinsa",
+    "tier": 1,
+    "url": "https://musinsa.career.greetinghr.com/ko/home",
+    "tags": ["\ub300\uae30\uc5c5", "\ucee4\uba38\uc2a4", "\ud50c\ub7ab\ud3fc"]
+  },
+  {
+    "company": "Daangn Market",
+    "tier": 1,
+    "url": "https://team.daangn.com/jobs/",
+    "tags": ["\ub300\uae30\uc5c5", "\ud50c\ub7ab\ud3fc", "\uba64\ubc84\uc2ed"]
+  },
+  {
+    "company": "Kurly",
+    "tier": 1,
+    "url": "https://kurly.career.greetinghr.com/ko/home",
+    "tags": ["\ub300\uae30\uc5c5", "\ucee4\uba38\uc2a4", "\ud50c\ub7ab\ud3fc"]
+  },
+  {
+    "company": "Shinhan Card via Saramin",
+    "fixedCompany": "\uc2e0\ud55c\uce74\ub4dc",
+    "source": "Saramin",
+    "tier": 2,
+    "url": "https://www.saramin.co.kr/zf_user/search?searchword=%EC%8B%A0%ED%95%9C%EC%B9%B4%EB%93%9C",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\ud540\ud14c\ud06c", "\uba64\ubc84\uc2ed"]
+  },
+  {
+    "company": "Saramin - B2B Planning",
+    "tier": 3,
+    "url": "https://www.saramin.co.kr/zf_user/search?searchword=B2B%20%EA%B8%B0%ED%9A%8D%20%EA%B2%BD%EB%A0%A5",
+    "tags": ["\ucc44\uc6a9\ud50c\ub7ab\ud3fc", "\ub300\uae30\uc5c5", "\uc911\uacac\uae30\uc5c5", "B2B"]
   }
 ]
