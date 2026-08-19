@@ -265,12 +265,19 @@ async function readDb() {
   }
 }
 
+// A UA that self-identifies as a bot, with no Accept-Language/browser headers, is
+// exactly what WAFs (Coupang/Catch/Wanted/Remember all run one) key off to 403 us.
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+const CURL_BIN = process.platform === "win32" ? "curl.exe" : "curl";
+
 async function fetchText(url) {
   try {
     const response = await fetch(url, {
       headers: {
-        "user-agent": "Mozilla/5.0 job-alerts/0.1 (+local personal job monitor)",
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        "user-agent": BROWSER_USER_AGENT,
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "accept-language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7"
       },
       redirect: "follow"
     });
@@ -280,17 +287,20 @@ async function fetchText(url) {
     return await response.text();
   } catch (fetchError) {
     try {
-      const { stdout } = await execFileAsync("curl.exe", [
+      const curlArgs = [
         "-L",
         "--silent",
         "--show-error",
-        "--ssl-no-revoke",
         "--max-time",
         "20",
         "-A",
-        "Mozilla/5.0 job-alerts/0.1 (+local personal job monitor)",
-        url
-      ], {
+        BROWSER_USER_AGENT,
+        "-H",
+        "Accept-Language: ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7"
+      ];
+      if (process.platform === "win32") curlArgs.push("--ssl-no-revoke");
+      curlArgs.push(url);
+      const { stdout } = await execFileAsync(CURL_BIN, curlArgs, {
         maxBuffer: 8 * 1024 * 1024,
         encoding: "utf8",
         windowsHide: true
@@ -885,19 +895,16 @@ async function sendTelegram(text) {
     }
   } catch (fetchError) {
     try {
-      await execFileAsync("curl.exe", [
-        "-L",
-        "--silent",
-        "--show-error",
-        "--ssl-no-revoke",
-        "--max-time",
-        "20",
+      const telegramCurlArgs = ["-L", "--silent", "--show-error", "--max-time", "20"];
+      if (process.platform === "win32") telegramCurlArgs.push("--ssl-no-revoke");
+      telegramCurlArgs.push(
         "-H",
         "content-type: application/json",
         "-d",
         payload,
         url
-      ], {
+      );
+      await execFileAsync(CURL_BIN, telegramCurlArgs, {
         maxBuffer: 1024 * 1024,
         encoding: "utf8",
         windowsHide: true
